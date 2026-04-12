@@ -125,6 +125,7 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .mov{position:absolute;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:center;justify-content:center;padding:14px;opacity:0;pointer-events:none;transition:opacity .18s;border-radius:var(--rl)}
 .mov.op{opacity:1;pointer-events:all}
 .mo{background:var(--n2);border:1px solid var(--bd3);border-radius:var(--rl);padding:20px;width:100%;max-width:520px;max-height:580px;overflow-y:auto;transform:translateY(16px);transition:transform .18s}
+.mo.dd-open{overflow:visible}
 .mov.op .mo{transform:translateY(0)}
 .moh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .mot{font-size:15px;font-weight:600;color:var(--wh)}
@@ -155,7 +156,7 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .mchip{background:var(--blp);color:var(--bll);border-radius:5px;padding:2px 7px;font-size:11px;display:flex;align-items:center;gap:3px;border:1px solid rgba(37,99,235,.25)}
 .mcx{cursor:pointer;opacity:.7;font-size:12px;color:var(--wh)}.mcx:hover{opacity:1}
 .minp{background:transparent;border:none;color:var(--wh);font-family:var(--font);font-size:12px;outline:none;min-width:60px;flex:1;padding:2px 0}
-.mdd{position:absolute;left:0;right:0;top:calc(100% + 3px);background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:500;max-height:160px;overflow-y:auto;display:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.mdd{background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:500;max-height:160px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,.4);margin-top:3px}
 .mdd.op{display:block}
 .mddi{padding:7px 11px;cursor:pointer;font-size:12px;color:var(--dim);transition:background .1s}
 .mddi:hover{background:var(--n4);color:var(--wh)}.mddi.sel{color:var(--bll);font-weight:500}
@@ -361,15 +362,19 @@ function selPlus(id,opts,addFn){return`<div class="add-row"><select class="fsel2
 function emp(ic,tx){return`<div class="emp"><div class="empi">${ic}</div><p style="font-size:12px">${esc(tx)}</p></div>`}
 function avH(n,cls=''){return`<div class="av ${cls}">${ini(n)}</div>`}
 function detTab(el,sid){el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));el.classList.add('on');let s=el.closest('.tabs').nextElementSibling;while(s){s.style.display='none';s=s.nextElementSibling;}document.getElementById(sid)?.style.setProperty('display','block');}
-function fOpts(sel,e){return(e?`<option value="">— Vyberte —</option>`:'')+DB.firmy.filter(f=>!f.interni).map(f=>`<option value="${f.id}"${sel===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}
-function allFOpts(sel){return`<option value="">—</option>`+DB.firmy.map(f=>`<option value="${f.id}"${sel===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}
-function prjOpts(sel){return`<option value="">— Bez projektu —</option>`+DB.projekty.map(p=>`<option value="${p.id}"${sel===p.id?' selected':''}>${esc(p.nazev)}</option>`).join('')}
-function tmeOsOpts(sel){return DB.osoby.filter(o=>o.firmaId===tme().id).map(o=>`<option value="${o.id}"${sel===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}
+// Sorting helpers: TME first, then alphabetical
+function sortedFirmy(list){const t=tme();return[...list].sort((a,b)=>{if(a.id===t.id)return-1;if(b.id===t.id)return 1;if(a.interni!==b.interni)return a.interni?-1:1;return a.nazev.localeCompare(b.nazev,'cs');});}
+function sortedOsoby(list){const tId=tme().id;return[...list].sort((a,b)=>{if(a.firmaId===tId&&b.firmaId!==tId)return-1;if(b.firmaId===tId&&a.firmaId!==tId)return 1;return a.jmeno.localeCompare(b.jmeno,'cs');});}
+function sortedProjekty(list){return[...list].sort((a,b)=>a.nazev.localeCompare(b.nazev,'cs'));}
+function fOpts(sel,e){return(e?`<option value="">— Vyberte —</option>`:'')+sortedFirmy(DB.firmy.filter(f=>!f.interni)).map(f=>`<option value="${f.id}"${sel===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}
+function allFOpts(sel){return`<option value="">—</option>`+sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${sel===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}
+function prjOpts(sel){return`<option value="">— Bez projektu —</option>`+sortedProjekty(DB.projekty).map(p=>`<option value="${p.id}"${sel===p.id?' selected':''}>${esc(p.nazev)}</option>`).join('')}
+function tmeOsOpts(sel){return sortedOsoby(DB.osoby.filter(o=>o.firmaId===tme().id)).map(o=>`<option value="${o.id}"${sel===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}
 
 // QUICK ADD
 function qaFirma(){openMo('Přidat firmu',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="qfn" autofocus></div><div class="fg"><label class="fl">Popis</label><input class="fi" id="qfp"></div>`,'',`<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="doQaFirma()">Přidat</button>`);}
 function doQaFirma(){const n=document.getElementById('qfn').value.trim();if(!n)return toast('Název je povinný',false);DB.firmy.push({id:uid(),nazev:n,popis:document.getElementById('qfp').value.trim(),prilohy:[]});saveDB();closeMo();toast('Firma přidána — znovu otevřete formulář pro výběr');}
-function qaOsoba(){openMo('Přidat osobu',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="qoj" autofocus></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="qop"></div></div><div class="fg"><label class="fl">Firma</label><select class="fsel2" id="qof">${DB.firmy.map(f=>`<option value="${f.id}"${f.id===tme().id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select></div>`,'',`<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="doQaOsoba()">Přidat</button>`);}
+function qaOsoba(){openMo('Přidat osobu',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="qoj" autofocus></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="qop"></div></div><div class="fg"><label class="fl">Firma</label><select class="fsel2" id="qof">${sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${f.id===tme().id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select></div>`,'',`<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="doQaOsoba()">Přidat</button>`);}
 function doQaOsoba(){const j=document.getElementById('qoj').value.trim();if(!j)return toast('Jméno je povinné',false);DB.osoby.push({id:uid(),jmeno:j,pozice:document.getElementById('qop').value.trim(),firmaId:document.getElementById('qof').value,podrizeny:false,email:'',tel:'',prilohy:[]});saveDB();closeMo();toast('Osoba přidána');}
 function qaProjekt(){openMo('Přidat projekt',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="qprn" autofocus></div><div class="fr"><div class="fg"><label class="fl">Firma</label><select class="fsel2" id="qprf"><option value="">—</option>${fOpts()}</select></div><div class="fg"><label class="fl">PM</label><select class="fsel2" id="qprpm">${tmeOsOpts()}</select></div></div>`,'',`<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="doQaProjekt()">Přidat</button>`);}
 function doQaProjekt(){const n=document.getElementById('qprn').value.trim();if(!n)return toast('Název je povinný',false);DB.projekty.push({id:uid(),nazev:n,firmaId:document.getElementById('qprf').value,firmaIds:[document.getElementById('qprf').value].filter(Boolean),pmId:document.getElementById('qprpm').value,typ:'jiné',status:'v přípravě',prilohy:[]});saveDB();closeMo();toast('Projekt přidán');}
@@ -509,7 +514,7 @@ function meetH(m,del){
 function firmy(){
   document.getElementById('tba').innerHTML=`<button class="btn bp bs" onclick="newFirma()">+ Nová firma</button>`;
   function renFirmy(q){
-    const list=q?DB.firmy.filter(f=>f.nazev.toLowerCase().includes(q.toLowerCase())):DB.firmy;
+    const list=sortedFirmy(q?DB.firmy.filter(f=>f.nazev.toLowerCase().includes(q.toLowerCase())):DB.firmy);
     document.getElementById('firmy-list').innerHTML=list.map(f=>`<div class="li" onclick="openFDet('${f.id}')">${avH(f.nazev)}
       <div class="lim"><div class="lit">${esc(f.nazev)} ${f.interni?'<span class="badge bbl" style="font-size:9px">Naše firma</span>':f.typ?`<span class="badge bgr2" style="font-size:9px">${esc(f.typ)}</span>`:''}</div>
       <div class="lis">${esc(f.popis||'')} · ${DB.osoby.filter(o=>o.firmaId===f.id).length} osob · ${DB.projekty.filter(p=>p.firmaIds?.includes(f.id)).length} projektů</div></div>
@@ -555,7 +560,7 @@ function projekty(){
       <div class="flt">
         ${['všechny',...PS].map(s=>`<button class="fb${sf===s?' on':''}" onclick="pf_('sf','${s}')">${s}</button>`).join('')}
         <div class="fsep"></div>
-        <select class="fsel" onchange="pf_('ff',this.value)"><option value="">Firma</option>${DB.firmy.filter(f=>!f.interni).map(f=>`<option value="${f.id}"${ff===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="pf_('ff',this.value)"><option value="">Firma</option>${sortedFirmy(DB.firmy).filter(f=>!f.interni).map(f=>`<option value="${f.id}"${ff===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select>
         <select class="fsel" onchange="pf_('pf',this.value)"><option value="">PM</option>${tOs.map(o=>`<option value="${o.id}"${pf===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
         <select class="fsel" onchange="pf_('tf',this.value)"><option value="">Typ</option>${DB.projektTypy.map(t=>`<option value="${t}"${tf===t?' selected':''}>${esc(t)}</option>`).join('')}</select>
       </div>
@@ -659,7 +664,7 @@ function ukoly(){
       <div class="flt">
         ${['všechny','otevřené','prošlé','dokončené'].map(s=>`<button class="fb${sf===s?' on':''}" onclick="uf_('sf','${s}')">${s}</button>`).join('')}
         <div class="fsep"></div>
-        <select class="fsel" onchange="uf_('of',this.value)"><option value="">Všechny osoby</option>${DB.osoby.map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
+        <select class="fsel" onchange="uf_('of',this.value)"><option value="">Všechny osoby</option>${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
       </div>
       ${list.length?list.map(u=>tskH(u,true)).join(''):emp('✅','Žádné úkoly')}
       <div style="margin-top:12px;text-align:center"><button class="btn bp" onclick="newT()">＋ Přidat úkol</button></div>`;
@@ -960,7 +965,7 @@ function delFirma(id){if(!confirm('Smazat firmu?'))return;DB.firmy=DB.firmy.filt
 function newOs(){
   const t=tme();
   openMo('Nová osoba',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="oj" autofocus></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="op"></div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('of',DB.firmy.map(f=>`<option value="${f.id}"${f.id===t.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
+    <div class="fg"><label class="fl">Firma</label>${selPlus('of',sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${f.id===t.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
     <div class="fr"><div class="fg"><label class="fl">E-mail</label><input class="fi" id="oe" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="ot"></div></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="od"></textarea></div>
     <div class="fg"><label class="fl">Tým</label><select class="fsel2" id="otym"><option value="">— bez týmu —</option>${TYMY.map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>`,'',
@@ -969,7 +974,7 @@ function newOs(){
 function editOs(id){
   const o=gO(id);if(!o)return;
   openMo('Upravit osobu',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="oj" value="${esc(o.jmeno)}"></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="op" value="${esc(o.pozice||'')}"></div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('of',DB.firmy.map(f=>`<option value="${f.id}"${o.firmaId===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
+    <div class="fg"><label class="fl">Firma</label>${selPlus('of',sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${o.firmaId===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
     <div class="fr"><div class="fg"><label class="fl">E-mail</label><input class="fi" id="oe" value="${esc(o.email||'')}" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="ot" value="${esc(o.tel||'')}"></div></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="od">${esc(o.popis||'')}</textarea></div>
     <div class="fg"><label class="fl">Tým</label><select class="fsel2" id="otym"><option value="">— bez týmu —</option>${TYMY.map(t=>`<option value="${t}"${o.tym===t?' selected':''}>${t}</option>`).join('')}</select></div>`,
@@ -1021,7 +1026,7 @@ function delPrj(id){if(!confirm('Smazat projekt?'))return;DB.projekty=DB.projekt
 // ÚKOL
 function buildT(text,pfOs,pfPrj,pfFirma){
   _ms={};const t=tme();
-  const osI=[...DB.osoby.filter(o=>o.firmaId===t.id),...DB.osoby.filter(o=>o.firmaId!==t.id)].map(o=>({id:o.id,label:o.jmeno}));
+  const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
   openMo('Nový úkol',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="un" value="${esc((text||'').slice(0,120))}" autofocus></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="upopis">${esc(text&&text.length>80?text:'')}</textarea></div>
     <div class="fg"><label class="fl">Přiřazeno osobám</label>${msHtml('uos')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaOsoba()" style="font-size:10px">＋ Přidat novou osobu</button></div></div>
@@ -1038,7 +1043,7 @@ function newT_meet(id){const m=DB.meetingy.find(m=>m.id===id);closeDet();setTime
 function editT(id){
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   _ms={};const t=tme();
-  const osI=[...DB.osoby.filter(o=>o.firmaId===t.id),...DB.osoby.filter(o=>o.firmaId!==t.id)].map(o=>({id:o.id,label:o.jmeno}));
+  const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
   openMo('Upravit úkol',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="un" value="${esc(u.nazev)}" autofocus></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="upopis">${esc(u.popis||'')}</textarea></div>
     <div class="fg"><label class="fl">Přiřazeno osobám</label>${msHtml('uos')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaOsoba()" style="font-size:10px">＋ Přidat novou osobu</button></div></div>
@@ -1071,9 +1076,9 @@ function savT(){
 // POZNÁMKA
 function buildN(ex,text,pfOs,pfFirmy,pfProj,pfMeetId){
   _ms={};const t=tme();
-  const osI=[...DB.osoby.filter(o=>o.firmaId===t.id),...DB.osoby.filter(o=>o.firmaId!==t.id)].map(o=>({id:o.id,label:o.jmeno}));
-  const fI=DB.firmy.map(f=>({id:f.id,label:f.nazev}));
-  const pI=DB.projekty.map(p=>({id:p.id,label:p.nazev}));
+  const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+  const fI=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
+  const pI=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
   openMo(ex?'Upravit poznámku':'Nová poznámka',`
     <div class="fg"><label class="fl">Předmět *</label><input class="fi" id="npred" value="${esc(ex?ex.predmet:(text?text.split('\n')[0].slice(0,80):''))}" autofocus></div>
     <div class="fg"><label class="fl">Obsah</label><textarea class="fta" id="nobs" style="min-height:70px">${esc(ex?ex.obsah:(text||''))}</textarea></div>
@@ -1104,9 +1109,9 @@ function savN(eid,meetId){
 // MEETING
 function newM(){
   _ms={};const t=tme();
-  const osI=[...DB.osoby.filter(o=>o.firmaId===t.id),...DB.osoby.filter(o=>o.firmaId!==t.id)].map(o=>({id:o.id,label:o.jmeno}));
-  const fI=DB.firmy.map(f=>({id:f.id,label:f.nazev}));
-  const pI=DB.projekty.map(p=>({id:p.id,label:p.nazev}));
+  const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+  const fI=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
+  const pI=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
   openMo('Nový meeting',`
     <div class="fg"><label class="fl">Název *</label><input class="fi" id="mn" autofocus></div>
     <div class="fr"><div class="fg"><label class="fl">Typ</label><select class="fsel2" id="mt">${MT.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div>
