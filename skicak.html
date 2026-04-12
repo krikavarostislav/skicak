@@ -124,7 +124,7 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 /* MODAL */
 .mov{position:absolute;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:center;justify-content:center;padding:14px;opacity:0;pointer-events:none;transition:opacity .18s;border-radius:var(--rl)}
 .mov.op{opacity:1;pointer-events:all}
-.mo{background:var(--n2);border:1px solid var(--bd3);border-radius:var(--rl);padding:20px;width:100%;max-width:520px;max-height:580px;overflow-y:auto;transform:translateY(16px);transition:transform .18s}
+.mo{background:var(--n2);border:1px solid var(--bd3);border-radius:var(--rl);padding:20px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;transform:translateY(16px);transition:transform .18s}
 .mo.dd-open{overflow:visible}
 .mov.op .mo{transform:translateY(0)}
 .moh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
@@ -156,7 +156,7 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .mchip{background:var(--blp);color:var(--bll);border-radius:5px;padding:2px 7px;font-size:11px;display:flex;align-items:center;gap:3px;border:1px solid rgba(37,99,235,.25)}
 .mcx{cursor:pointer;opacity:.7;font-size:12px;color:var(--wh)}.mcx:hover{opacity:1}
 .minp{background:transparent;border:none;color:var(--wh);font-family:var(--font);font-size:12px;outline:none;min-width:60px;flex:1;padding:2px 0}
-.mdd{background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:500;max-height:160px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,.4);margin-top:3px}
+.mdd{position:absolute;left:0;right:0;top:calc(100% + 3px);background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:500;max-height:160px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,.4)}
 .mdd.op{display:block}
 .mddi{padding:7px 11px;cursor:pointer;font-size:12px;color:var(--dim);transition:background .1s}
 .mddi:hover{background:var(--n4);color:var(--wh)}.mddi.sel{color:var(--bll);font-weight:500}
@@ -344,8 +344,8 @@ function renderMs(id){
   const chips=ms.selected.map(sid=>{const it=ms.items.find(i=>i.id===sid);if(!it)return'';return`<span class="mchip">${esc(it.label)}<span class="mcx" onmousedown="event.preventDefault();msRm('${id}','${sid}')">×</span></span>`;}).join('');
   w.innerHTML=chips+`<input class="minp" id="mi-${id}" placeholder="${ms.selected.length?'':'Vyberte…'}" oninput="msFilter('${id}',this.value)" onfocus="msDdOp('${id}')" onblur="setTimeout(()=>msDdCl('${id}'),220)">`;
 }
-function msDdOp(id){msFilter(id,'');document.getElementById('mdd-'+id)?.classList.add('op')}
-function msDdCl(id){document.getElementById('mdd-'+id)?.classList.remove('op')}
+function msDdOp(id){msFilter(id,'');document.getElementById('mdd-'+id)?.classList.add('op');document.querySelector('.mo')?.classList.add('dd-open');}
+function msDdCl(id){document.getElementById('mdd-'+id)?.classList.remove('op');document.querySelector('.mo')?.classList.remove('dd-open');}
 function msFilter(id,q){
   const ms=_ms[id];if(!ms)return;const dd=document.getElementById('mdd-'+id);if(!dd)return;
   const f=ms.items.filter(i=>i.label.toLowerCase().includes(q.toLowerCase()));
