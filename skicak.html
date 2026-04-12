@@ -275,7 +275,7 @@ function loadDB() {
 function migrateDB() {
   if(!DB.apiKey) DB.apiKey='';
   if(!DB.projektTypy) DB.projektTypy=['Development','e-cast','e-cme','e-learning','e-mailing','MRP','vb.čl','jiné'];
-  DB.osoby.forEach(o=>{if(!o.prilohy)o.prilohy=[];if(!o.tym)o.tym=o.podrizeny?'Digi':'';});
+  DB.osoby.forEach(o=>{if(!o.prilohy)o.prilohy=[];if(!o.tym)o.tym=o.podrizeny?'Digi':'';if(!o.firmaIds)o.firmaIds=o.firmaId?[o.firmaId]:[];});
   DB.projekty.forEach(p=>{if(!p.prilohy)p.prilohy=[];if(!p.firmaIds)p.firmaIds=p.firmaId?[p.firmaId]:[];});
   DB.firmy.forEach(f=>{if(!f.prilohy)f.prilohy=[];if(!f.typ)f.typ=f.interni?'Naše firma':'Klient';});
   DB.ukoly.forEach(u=>{if(!u.prilohy)u.prilohy=[];if(!u.poznamka)u.poznamka='';if(!u.tags)u.tags={firmaIds:[],projektIds:[],osobyIds:[]};});
@@ -362,10 +362,19 @@ function msDdOp(id){
   portal.dataset.msid=id;
   if(mw){
     const r=mw.getBoundingClientRect();
-    portal.style.left=r.left+'px';
-    portal.style.top=(r.bottom+4)+'px';
-    portal.style.width=r.width+'px';
+    // Account for any viewport clipping
+    const top=r.bottom+4;
+    const left=r.left;
+    const width=r.width;
+    portal.style.left=left+'px';
+    portal.style.top=top+'px';
+    portal.style.width=width+'px';
     portal.style.minWidth='180px';
+    // Flip upward if too close to bottom of viewport
+    const ddH=180;
+    if(top+ddH>window.innerHeight && r.top>ddH){
+      portal.style.top=(r.top-ddH-4)+'px';
+    }
   }
   msFilter(id,'');
   portal.classList.add('op');
@@ -631,8 +640,8 @@ function osoby(){
     const t=tme();
     let all=DB.osoby;
     if(tf!=='všechny') all=all.filter(o=>o.tym===tf);
-    const tOs=all.filter(o=>o.firmaId===t.id);
-    const ostOs=all.filter(o=>o.firmaId!==t.id);
+    const tOs=sortedOsoby(all.filter(o=>(o.firmaIds||[o.firmaId]).includes(t.id)));
+    const ostOs=sortedOsoby(all.filter(o=>!(o.firmaIds||[o.firmaId]).includes(t.id)));
     document.getElementById('content').innerHTML=`
       <div class="flt">
         ${['všechny',...TYMY].map(s=>`<button class="fb${tf===s?' on':''}" onclick="of_('${s}')">${s}</button>`).join('')}
@@ -644,7 +653,10 @@ function osoby(){
     window.of_=(v)=>{tf=v;ren();};
   }
 }
-function osItem(o){const f=gF(o.firmaId);return`<div class="li" onclick="openODet('${o.id}')">${avH(o.jmeno)}<div class="lim"><div class="lit">${esc(o.jmeno)} ${o.ja?'<span class="badge bbl" style="font-size:9px">Já</span>':''} ${o.tym?`<span class="badge bgr" style="font-size:9px">${esc(o.tym)}</span>`:''}</div><div class="lis">${esc(o.pozice||'')}${f?' · '+esc(f.nazev):''}</div></div><button class="bi" onclick="event.stopPropagation();editOs('${o.id}')">✎</button></div>`;}
+function osItem(o){
+  const firmaStr=(o.firmaIds&&o.firmaIds.length?o.firmaIds:o.firmaId?[o.firmaId]:[]).map(id=>{const f=gF(id);return f?f.nazev:''}).filter(Boolean).join(', ');
+  return`<div class="li" onclick="openODet('${o.id}')">${avH(o.jmeno)}<div class="lim"><div class="lit">${esc(o.jmeno)} ${o.ja?'<span class="badge bbl" style="font-size:9px">Já</span>':''} ${o.tym?`<span class="badge bgr" style="font-size:9px">${esc(o.tym)}</span>`:''}</div><div class="lis">${esc(o.pozice||'')}${firmaStr?' · '+esc(firmaStr):''}</div></div><button class="bi" onclick="event.stopPropagation();editOs('${o.id}')">✎</button></div>`;
+}
 
 function openODet(id){
   const o=gO(id);if(!o)return;
@@ -681,7 +693,7 @@ function openODet(id){
 // PAGE: ÚKOLY
 // ============================================================
 function ukoly(){
-  let sf='otevřené',of='';
+  let sf='otevřené',ff='',pf='',of='';
   document.getElementById('tba').innerHTML=`<button class="btn bp bs" onclick="newT()">+ Nový úkol</button>`;
   ren();
   function ren(){
@@ -689,17 +701,21 @@ function ukoly(){
     if(sf==='otevřené')list=list.filter(u=>!u.done);
     else if(sf==='dokončené')list=list.filter(u=>u.done);
     else if(sf==='prošlé')list=list.filter(u=>!u.done&&ovd(u.deadline));
-    if(of)list=list.filter(u=>u.prirazena&&u.prirazena.includes(of));
+    if(ff)list=list.filter(u=>u.firmaId===ff||(u.tags?.firmaIds||[]).includes(ff));
+    if(pf)list=list.filter(u=>u.projektId===pf||(u.tags?.projektIds||[]).includes(pf));
+    if(of)list=list.filter(u=>(u.prirazena||[]).includes(of));
     list=sortedUkoly(list);
     document.getElementById('content').innerHTML=`
       <div class="flt">
         ${['všechny','otevřené','prošlé','dokončené'].map(s=>`<button class="fb${sf===s?' on':''}" onclick="uf_('sf','${s}')">${s}</button>`).join('')}
         <div class="fsep"></div>
-        <select class="fsel" onchange="uf_('of',this.value)"><option value="">Všechny osoby</option>${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
+        <select class="fsel" onchange="uf_('ff',this.value)"><option value="">Firma</option>${sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${ff===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="uf_('pf',this.value)"><option value="">Projekt</option>${sortedProjekty(DB.projekty).map(p=>`<option value="${p.id}"${pf===p.id?' selected':''}>${esc(p.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="uf_('of',this.value)"><option value="">Osoba</option>${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
       </div>
       ${list.length?list.map(u=>tskH(u,true)).join(''):emp('✅','Žádné úkoly')}
       <div style="margin-top:12px;text-align:center"><button class="btn bp" onclick="newT()">＋ Přidat úkol</button></div>`;
-    window.uf_=(k,v)=>{if(k==='sf')sf=v;else of=v;ren();};
+    window.uf_=(k,v)=>{if(k==='sf')sf=v;else if(k==='ff')ff=v;else if(k==='pf')pf=v;else of=v;ren();};
   }
 }
 
@@ -752,17 +768,26 @@ function addUUpd(id){const i=document.getElementById('ui-'+id);if(!i)return;cons
 // PAGE: MEETINGY
 // ============================================================
 function meetingy(){
-  let tf='vše';
+  let tf='vše',ff='',pf='',of='';
   document.getElementById('tba').innerHTML=`<button class="btn bp bs" onclick="newM()">+ Nový meeting</button>`;
   ren();
   function ren(){
     let list=[...DB.meetingy].sort((a,b)=>new Date(b.datum)-new Date(a.datum));
     if(tf!=='vše')list=list.filter(m=>m.typ===tf);
+    if(ff)list=list.filter(m=>(m.firmaIds||[]).includes(ff));
+    if(pf)list=list.filter(m=>(m.projektIds||[]).includes(pf));
+    if(of)list=list.filter(m=>(m.ucastnici||[]).includes(of));
     document.getElementById('content').innerHTML=`
-      <div class="flt">${['vše',...MT].map(t=>`<button class="fb${tf===t?' on':''}" onclick="mf_('${t}')">${t}</button>`).join('')}</div>
+      <div class="flt">
+        ${['vše',...MT].map(t=>`<button class="fb${tf===t?' on':''}" onclick="mf_('t','${t}')">${t}</button>`).join('')}
+        <div class="fsep"></div>
+        <select class="fsel" onchange="mf_('ff',this.value)"><option value="">Firma</option>${sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${ff===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="mf_('pf',this.value)"><option value="">Projekt</option>${sortedProjekty(DB.projekty).map(p=>`<option value="${p.id}"${pf===p.id?' selected':''}>${esc(p.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="mf_('of',this.value)"><option value="">Osoba</option>${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
+      </div>
       ${list.length?list.map(m=>meetH(m,true)).join(''):emp('📅','Žádné meetingy')}
       <div style="margin-top:12px;text-align:center"><button class="btn bp" onclick="newM()">＋ Přidat meeting</button></div>`;
-    window.mf_=(t)=>{tf=t;ren();};
+    window.mf_=(k,v)=>{if(k==='t')tf=v;else if(k==='ff')ff=v;else if(k==='pf')pf=v;else of=v;ren();};
   }
 }
 
@@ -910,9 +935,24 @@ function delM(id){if(!confirm('Smazat meeting?'))return;DB.meetingy=DB.meetingy.
 // PAGE: POZNÁMKY
 // ============================================================
 function poznamky(){
+  let ff='',pf='',of='';
   document.getElementById('tba').innerHTML=`<button class="btn bp bs" onclick="newN()">+ Nová poznámka</button>`;
-  const list=[...DB.poznamky].sort((a,b)=>{if(a.pinned!==b.pinned)return a.pinned?-1:1;return new Date(b.datum||b.created)-new Date(a.datum||a.created);});
-  document.getElementById('content').innerHTML=`${list.length?list.map(n=>noteH(n)).join(''):emp('📝','Žádné poznámky')}<div style="margin-top:12px;text-align:center"><button class="btn bp" onclick="newN()">＋ Přidat poznámku</button></div>`;
+  ren();
+  function ren(){
+    let list=[...DB.poznamky].sort((a,b)=>{if(a.pinned!==b.pinned)return a.pinned?-1:1;return new Date(b.datum||b.created)-new Date(a.datum||a.created);});
+    if(ff)list=list.filter(n=>(n.firmaIds||[]).includes(ff));
+    if(pf)list=list.filter(n=>(n.projektIds||[]).includes(pf));
+    if(of)list=list.filter(n=>(n.osobyIds||[]).includes(of));
+    document.getElementById('content').innerHTML=`
+      <div class="flt">
+        <select class="fsel" onchange="nf_('ff',this.value)"><option value="">Firma</option>${sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${ff===f.id?' selected':''}>${esc(f.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="nf_('pf',this.value)"><option value="">Projekt</option>${sortedProjekty(DB.projekty).map(p=>`<option value="${p.id}"${pf===p.id?' selected':''}>${esc(p.nazev)}</option>`).join('')}</select>
+        <select class="fsel" onchange="nf_('of',this.value)"><option value="">Osoba</option>${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${of===o.id?' selected':''}>${esc(o.jmeno.split(' ')[0])}</option>`).join('')}</select>
+      </div>
+      ${list.length?list.map(n=>noteH(n)).join(''):emp('📝','Žádné poznámky')}
+      <div style="margin-top:12px;text-align:center"><button class="btn bp" onclick="newN()">＋ Přidat poznámku</button></div>`;
+    window.nf_=(k,v)=>{if(k==='ff')ff=v;else if(k==='pf')pf=v;else of=v;ren();};
+  }
 }
 
 function openNDet(id){
@@ -994,25 +1034,35 @@ function delFirma(id){if(!confirm('Smazat firmu?'))return;DB.firmy=DB.firmy.filt
 
 // OSOBA
 function newOs(){
-  const t=tme();
+  _ms={};const t=tme();
+  const fI=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
   openMo('Nová osoba',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="oj" autofocus></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="op"></div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('of',sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${f.id===t.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
+    <div class="fg"><label class="fl">Firma</label>${msHtml('ofirmy')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaFirma()" style="font-size:10px">＋ Přidat novou firmu</button></div></div>
     <div class="fr"><div class="fg"><label class="fl">E-mail</label><input class="fi" id="oe" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="ot"></div></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="od"></textarea></div>
     <div class="fg"><label class="fl">Tým</label><select class="fsel2" id="otym"><option value="">— bez týmu —</option>${TYMY.map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>`,'',
     `<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="savOs()">Uložit</button>`);
+  requestAnimationFrame(()=>initMs('ofirmy',fI,[t.id],'qaFirma'));
 }
 function editOs(id){
-  const o=gO(id);if(!o)return;
+  _ms={};const o=gO(id);if(!o)return;
+  const fI=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
   openMo('Upravit osobu',`<div class="fr"><div class="fg"><label class="fl">Jméno *</label><input class="fi" id="oj" value="${esc(o.jmeno)}"></div><div class="fg"><label class="fl">Pozice</label><input class="fi" id="op" value="${esc(o.pozice||'')}"></div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('of',sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${o.firmaId===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>
+    <div class="fg"><label class="fl">Firma</label>${msHtml('ofirmy')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaFirma()" style="font-size:10px">＋ Přidat novou firmu</button></div></div>
     <div class="fr"><div class="fg"><label class="fl">E-mail</label><input class="fi" id="oe" value="${esc(o.email||'')}" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="ot" value="${esc(o.tel||'')}"></div></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="od">${esc(o.popis||'')}</textarea></div>
     <div class="fg"><label class="fl">Tým</label><select class="fsel2" id="otym"><option value="">— bez týmu —</option>${TYMY.map(t=>`<option value="${t}"${o.tym===t?' selected':''}>${t}</option>`).join('')}</select></div>`,
     o.ja?'':` <button class="btn brd bs" onclick="delOs('${id}')">Smazat</button>`,
     `<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="savOs('${id}')">Uložit</button>`);
+  requestAnimationFrame(()=>initMs('ofirmy',fI,o.firmaId?[o.firmaId]:[],'qaFirma'));
 }
-function savOs(eid){const j=document.getElementById('oj').value.trim();if(!j)return toast('Jméno je povinné',false);const d={jmeno:j,pozice:document.getElementById('op').value.trim(),firmaId:document.getElementById('of').value,email:document.getElementById('oe').value.trim(),tel:document.getElementById('ot').value.trim(),popis:document.getElementById('od').value.trim(),tym:document.getElementById('otym').value};if(eid){const o=gO(eid);Object.assign(o,d);}else DB.osoby.push({id:uid(),...d,prilohy:[]});saveDB();closeMo();go('osoby');toast(eid?'Osoba upravena':'Osoba přidána');}
+function savOs(eid){
+  const j=document.getElementById('oj').value.trim();if(!j)return toast('Jméno je povinné',false);
+  const firmaIds=msGet('ofirmy');
+  const d={jmeno:j,pozice:document.getElementById('op').value.trim(),firmaId:firmaIds[0]||'',firmaIds,email:document.getElementById('oe').value.trim(),tel:document.getElementById('ot').value.trim(),popis:document.getElementById('od').value.trim(),tym:document.getElementById('otym').value};
+  if(eid){const o=gO(eid);Object.assign(o,d);}else DB.osoby.push({id:uid(),...d,prilohy:[]});
+  saveDB();closeMo();go('osoby');toast(eid?'Osoba upravena':'Osoba přidána');
+}
 function delOs(id){if(!confirm('Smazat?'))return;DB.osoby=DB.osoby.filter(o=>o.id!==id);saveDB();closeMo();go('osoby');toast('Osoba smazána');}
 
 // PROJEKT — firmaIds multiselect
