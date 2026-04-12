@@ -156,8 +156,8 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .mchip{background:var(--blp);color:var(--bll);border-radius:5px;padding:2px 7px;font-size:11px;display:flex;align-items:center;gap:3px;border:1px solid rgba(37,99,235,.25)}
 .mcx{cursor:pointer;opacity:.7;font-size:12px;color:var(--wh)}.mcx:hover{opacity:1}
 .minp{background:transparent;border:none;color:var(--wh);font-family:var(--font);font-size:12px;outline:none;min-width:60px;flex:1;padding:2px 0}
-.mdd{position:absolute;left:0;right:0;top:calc(100% + 3px);background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:500;max-height:160px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,.4)}
-.mdd.op{display:block}
+.mdd-portal{position:fixed;background:var(--n3);border:1px solid var(--bd3);border-radius:8px;z-index:9999;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.6);display:none}
+.mdd-portal.op{display:block}
 .mddi{padding:7px 11px;cursor:pointer;font-size:12px;color:var(--dim);transition:background .1s}
 .mddi:hover{background:var(--n4);color:var(--wh)}.mddi.sel{color:var(--bll);font-weight:500}
 .mddi-add{color:var(--bll);font-style:italic;border-top:1px solid var(--bd2)}
@@ -338,24 +338,53 @@ function openDet(h,b){document.getElementById('dh').innerHTML=h;document.getElem
 function closeDet(){document.getElementById('det').classList.remove('op')}
 
 // MULTISELECT
+// MULTISELECT — portal dropdown (renders in body, positions via getBoundingClientRect)
+let _mddPortal = null;
+let _mddActiveId = null;
+
+function _getPortal(){
+  if(!_mddPortal){_mddPortal=document.createElement('div');_mddPortal.className='mdd-portal';_mddPortal.id='mdd-portal';document.body.appendChild(_mddPortal);}
+  return _mddPortal;
+}
+
 function initMs(id,items,sel,addFnName){_ms[id]={items:[...items],selected:[...(sel||[])],addFn:addFnName};renderMs(id);}
+
 function renderMs(id){
   const ms=_ms[id];if(!ms)return;const w=document.getElementById('mw-'+id);if(!w)return;
   const chips=ms.selected.map(sid=>{const it=ms.items.find(i=>i.id===sid);if(!it)return'';return`<span class="mchip">${esc(it.label)}<span class="mcx" onmousedown="event.preventDefault();msRm('${id}','${sid}')">×</span></span>`;}).join('');
   w.innerHTML=chips+`<input class="minp" id="mi-${id}" placeholder="${ms.selected.length?'':'Vyberte…'}" oninput="msFilter('${id}',this.value)" onfocus="msDdOp('${id}')" onblur="setTimeout(()=>msDdCl('${id}'),220)">`;
 }
-function msDdOp(id){msFilter(id,'');document.getElementById('mdd-'+id)?.classList.add('op');document.querySelector('.mo')?.classList.add('dd-open');}
-function msDdCl(id){document.getElementById('mdd-'+id)?.classList.remove('op');document.querySelector('.mo')?.classList.remove('dd-open');}
-function msFilter(id,q){
-  const ms=_ms[id];if(!ms)return;const dd=document.getElementById('mdd-'+id);if(!dd)return;
-  const f=ms.items.filter(i=>i.label.toLowerCase().includes(q.toLowerCase()));
-  const addRow=ms.addFn?`<div class="mddi mddi-add" onmousedown="event.preventDefault();${ms.addFn}()">＋ Přidat nový…</div>`:'';
-  dd.innerHTML=f.map(i=>`<div class="mddi${ms.selected.includes(i.id)?' sel':''}" onmousedown="event.preventDefault();msPick('${id}','${i.id}')">${esc(i.label)}</div>`).join('')+addRow;
+
+function msDdOp(id){
+  _mddActiveId=id;
+  msFilter(id,'');
+  const inp=document.getElementById('mi-'+id);
+  const portal=_getPortal();
+  if(inp){
+    const r=inp.closest('.mw').getBoundingClientRect();
+    portal.style.left=r.left+'px';
+    portal.style.top=(r.bottom+4)+'px';
+    portal.style.width=r.width+'px';
+  }
+  portal.classList.add('op');
 }
+
+function msDdCl(id){
+  if(_mddActiveId===id){_getPortal().classList.remove('op');_mddActiveId=null;}
+}
+
+function msFilter(id,q){
+  const ms=_ms[id];if(!ms)return;
+  const portal=_getPortal();
+  const f=ms.items.filter(i=>i.label.toLowerCase().includes((q||'').toLowerCase()));
+  const addRow=ms.addFn?`<div class="mddi mddi-add" onmousedown="event.preventDefault();${ms.addFn}()">＋ Přidat nový…</div>`:'';
+  portal.innerHTML=f.map(i=>`<div class="mddi${ms.selected.includes(i.id)?' sel':''}" onmousedown="event.preventDefault();msPick('${id}','${i.id}')">${esc(i.label)}</div>`).join('')+addRow;
+}
+
 function msPick(id,sid){const ms=_ms[id];if(!ms)return;if(!ms.selected.includes(sid))ms.selected.push(sid);else ms.selected=ms.selected.filter(x=>x!==sid);renderMs(id);msFilter(id,'');}
 function msRm(id,sid){const ms=_ms[id];if(!ms)return;ms.selected=ms.selected.filter(x=>x!==sid);renderMs(id);}
 function msGet(id){return(_ms[id]||{}).selected||[]}
-function msHtml(id){return`<div class="mw" id="mw-${id}"></div><div class="mdd" id="mdd-${id}"></div>`}
+function msHtml(id){return`<div class="mw" id="mw-${id}"></div>`}
 function selPlus(id,opts,addFn){return`<div class="add-row"><select class="fsel2" id="${id}">${opts}</select><button class="add-btn" onclick="${addFn}" title="Přidat nové">＋</button></div>`}
 
 // HELPERS
@@ -1027,14 +1056,18 @@ function delPrj(id){if(!confirm('Smazat projekt?'))return;DB.projekty=DB.projekt
 function buildT(text,pfOs,pfPrj,pfFirma){
   _ms={};const t=tme();
   const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+  const pI=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
   openMo('Nový úkol',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="un" value="${esc((text||'').slice(0,120))}" autofocus></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="upopis">${esc(text&&text.length>80?text:'')}</textarea></div>
     <div class="fg"><label class="fl">Přiřazeno osobám</label>${msHtml('uos')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaOsoba()" style="font-size:10px">＋ Přidat novou osobu</button></div></div>
+    <div class="fg"><label class="fl">Projekt</label>${msHtml('uprj')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaProjekt()" style="font-size:10px">＋ Přidat nový projekt</button></div></div>
     <div class="fr"><div class="fg"><label class="fl">Deadline</label><input class="fi" id="ud" type="date" value="${today()}"></div>
-    <div class="fg"><label class="fl">Projekt</label>${selPlus('uprj',prjOpts(pfPrj),'qaProjekt()')}</div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('uf',`<option value="">—</option>`+DB.firmy.map(f=>`<option value="${f.id}"${pfFirma===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>`,'',
+    <div class="fg"><label class="fl">Firma</label>${selPlus('uf',`<option value="">—</option>`+sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${pfFirma===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div></div>`,'',
     `<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="savT()">Uložit</button>`);
-  requestAnimationFrame(()=>initMs('uos',osI,Array.isArray(pfOs)?pfOs:(pfOs?[pfOs]:[jaOs().id]),'qaOsoba'));
+  requestAnimationFrame(()=>{
+    initMs('uos',osI,Array.isArray(pfOs)?pfOs:(pfOs?[pfOs]:[jaOs().id]),'qaOsoba');
+    initMs('uprj',pI,pfPrj?[pfPrj]:[],'qaProjekt');
+  });
 }
 function newT(pfOs,pfPrj){buildT('',pfOs?[pfOs]:null,pfPrj||'',(gP(pfPrj)||{}).firmaId||'');}
 function newT_os(id){closeDet();setTimeout(()=>newT(id),60)}
@@ -1044,19 +1077,23 @@ function editT(id){
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   _ms={};const t=tme();
   const osI=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+  const pI=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
   openMo('Upravit úkol',`<div class="fg"><label class="fl">Název *</label><input class="fi" id="un" value="${esc(u.nazev)}" autofocus></div>
     <div class="fg"><label class="fl">Popis</label><textarea class="fta" id="upopis">${esc(u.popis||'')}</textarea></div>
     <div class="fg"><label class="fl">Přiřazeno osobám</label>${msHtml('uos')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaOsoba()" style="font-size:10px">＋ Přidat novou osobu</button></div></div>
+    <div class="fg"><label class="fl">Projekt</label>${msHtml('uprj')}<div style="margin-top:4px"><button class="btn bg bs" onclick="qaProjekt()" style="font-size:10px">＋ Přidat nový projekt</button></div></div>
     <div class="fr"><div class="fg"><label class="fl">Deadline</label><input class="fi" id="ud" type="date" value="${u.deadline||''}"></div>
-    <div class="fg"><label class="fl">Projekt</label>${selPlus('uprj',prjOpts(u.projektId),'qaProjekt()')}</div></div>
-    <div class="fg"><label class="fl">Firma</label>${selPlus('uf',`<option value="">—</option>`+DB.firmy.map(f=>`<option value="${f.id}"${u.firmaId===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div>`,'',
+    <div class="fg"><label class="fl">Firma</label>${selPlus('uf',`<option value="">—</option>`+sortedFirmy(DB.firmy).map(f=>`<option value="${f.id}"${u.firmaId===f.id?' selected':''}>${esc(f.nazev)}</option>`).join(''),'qaFirma()')}</div></div>`,'',
     `<button class="btn bg bs" onclick="closeMo()">Zrušit</button><button class="btn bp bs" onclick="saveEditT('${id}')">Uložit</button>`);
-  requestAnimationFrame(()=>initMs('uos',osI,u.prirazena||[],'qaOsoba'));
+  requestAnimationFrame(()=>{
+    initMs('uos',osI,u.prirazena||[],'qaOsoba');
+    initMs('uprj',pI,u.projektId?[u.projektId]:[],'qaProjekt');
+  });
 }
 function saveEditT(id){
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   const n=document.getElementById('un').value.trim();if(!n)return toast('Název je povinný',false);
-  const prjId=document.getElementById('uprj').value;
+  const prjId=msGet('uprj')[0]||'';
   const firmaId=document.getElementById('uf').value;
   u.nazev=n;u.popis=document.getElementById('upopis').value.trim();
   u.prirazena=msGet('uos');u.deadline=document.getElementById('ud').value;
@@ -1066,7 +1103,7 @@ function saveEditT(id){
 }
 function savT(){
   const n=document.getElementById('un').value.trim();if(!n)return toast('Název je povinný',false);
-  const prjId=document.getElementById('uprj').value;
+  const prjId=msGet('uprj')[0]||'';
   const firmaId=document.getElementById('uf').value;
   const prj=gP(prjId);
   DB.ukoly.push({id:uid(),nazev:n,popis:document.getElementById('upopis').value.trim(),prirazena:msGet('uos'),deadline:document.getElementById('ud').value,projektId:prjId,firmaId,tags:{firmaIds:firmaId?[firmaId]:[],projektIds:prjId?[prjId]:[],osobyIds:msGet('uos')},done:false,created:today(),poznamka:'',prilohy:[]});
