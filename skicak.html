@@ -1182,19 +1182,32 @@ function ukoly(){
   }
 }
 
-// Toggle task done state — re-render in-place for shared object behaviour
+// Safe in-place re-render of a single task item + its accordion
+function _rerenderT(u, keepOpen) {
+  const el = document.getElementById('ti-'+u.id);
+  const acc = document.getElementById('tac-'+u.id);
+  if (!el) return;
+  const del = el.querySelector('.bi[onclick*="delT"]') !== null;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = tskH(u, del);
+  // tskH returns two sibling elements: the card (ti-) and the accordion (tac-)
+  const newCard = wrapper.firstElementChild;
+  const newAcc = wrapper.lastElementChild;
+  el.replaceWith(newCard);
+  if (acc) acc.replaceWith(newAcc);
+  if (keepOpen) {
+    const c = document.getElementById('tac-'+u.id);
+    const i = document.getElementById('ti-'+u.id);
+    if (c && i) { c.classList.add('open'); i.classList.add('acc-open'); }
+  }
+}
+
+// Toggle task done state
 function togT(id,e){
   if(e)e.stopPropagation();
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   u.done=!u.done;saveDB();
-  // Re-render all visible instances of this task
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const wasOpen=document.getElementById('tac-'+id)?.classList.contains('open');
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    if(wasOpen){const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}}
-  });
-  // Also re-render any remaining stale containers that might list this task
+  _rerenderT(u, false);
   updBdg();
 }
 function delT(id){if(!confirm('Smazat úkol?'))return;DB.ukoly=DB.ukoly.filter(u=>u.id!==id);saveDB();go(curPage);toast('Úkol smazán')}
@@ -1212,13 +1225,7 @@ function addUUpdAcc(id){
   const dat=datEl?.value||today();
   if(!u.updates)u.updates=[];u.updates.push({datum:dat,text:t});
   saveDB();
-  // Re-render in-place, keep accordion open
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);
-    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
-  });
+  _rerenderT(u, true);
   toast('Aktualizace přidána');
 }
 function addUUpd(id){const i=document.getElementById('ui-'+id);if(!i)return;const t=i.value.trim();if(!t)return;const u=DB.ukoly.find(u=>u.id===id);if(!u)return;if(!u.updates)u.updates=[];u.updates.push({datum:today(),text:t});saveDB();openTDet(id);toast('Přidáno')}
@@ -1226,12 +1233,7 @@ function addUUpd(id){const i=document.getElementById('ui-'+id);if(!i)return;cons
 function delUUpd(id,idx){
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   u.updates.splice(idx,1);saveDB();
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);
-    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
-  });
+  _rerenderT(u, true);
   toast('Aktualizace smazána');
 }
 
@@ -1242,35 +1244,20 @@ function addSubtask(id){
   if(!u.subtasks)u.subtasks=[];
   u.subtasks.push({id:uid(),text:t,done:false});
   saveDB();
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);
-    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
-  });
+  _rerenderT(u, true);
   toast('Podúkol přidán');
 }
 
 function togSubtask(id,idx){
   const u=DB.ukoly.find(u=>u.id===id);if(!u||!u.subtasks)return;
   u.subtasks[idx].done=!u.subtasks[idx].done;saveDB();
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);
-    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
-  });
+  _rerenderT(u, true);
 }
 
 function delSubtask(id,idx){
   const u=DB.ukoly.find(u=>u.id===id);if(!u||!u.subtasks)return;
   u.subtasks.splice(idx,1);saveDB();
-  document.querySelectorAll(`[id="ti-${id}"]`).forEach(el=>{
-    const del=el.querySelector('.bi[onclick*="delT"]')!==null;
-    el.outerHTML=tskH(u,del);
-    const newAcc=document.getElementById('tac-'+id);const newItem=document.getElementById('ti-'+id);
-    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
-  });
+  _rerenderT(u, true);
   toast('Podúkol smazán');
 }
 
