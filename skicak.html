@@ -119,6 +119,7 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .t-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:5px}
 /* MEETINGS */
 .mtkl{border-left:3px solid var(--bll)!important}.mt1v1{border-left:3px solid var(--ok)!important}.mttym{border-left:3px solid var(--warn)!important}.mtmg{border-left:3px solid var(--err)!important}
+.li.acc-open{border-bottom-left-radius:0;border-bottom-right-radius:0;border-color:var(--bd3)}
 /* PROFILE */
 .phero{background:linear-gradient(135deg,var(--n3) 0%,var(--blp) 100%);border-radius:var(--rl);padding:20px;margin-bottom:16px;border:1px solid var(--bd2)}
 /* MODAL */
@@ -684,11 +685,83 @@ function addNUpdAcc(id){
 
 function meetH(m,del){
   const tc={'s klientem':'mtkl','1:1':'mt1v1','s týmem':'mttym','s managementem':'mtmg'}[m.typ]||'';
-  return`<div class="li ${tc}" onclick="openMDet('${m.id}')">
+  const ps=(m.ucastnici||[]).slice(0,4).map(id=>{const o=gO(id);return o?`<span class="av avxs" title="${esc(o.jmeno)}">${ini(o.jmeno)}</span>`:''}).join('');
+  const hasKey=!!(DB.apiKey||'').trim();
+  return`<div class="li ${tc}" id="mi-${m.id}" onclick="toggleMAcc('${m.id}')">
     <div class="av avsm" style="font-size:13px">📅</div>
     <div class="lim"><div class="lit">${esc(m.nazev)}</div><div class="lis">${fd(m.datum)} · ${esc(m.typ||'')}${(m.firmaIds||[]).length?' · '+m.firmaIds.map(fn).join(', '):''}</div></div>
-    <div class="lir"><span class="badge bgr2">${esc(m.typ||'')}</span>${del?`<button class="bi" style="font-size:11px;color:#fca5a5" onclick="event.stopPropagation();delM('${m.id}')">✕</button>`:''}</div>
+    <div class="lir">${ps?`<div style="display:flex;gap:2px">${ps}</div>`:''}<span class="badge bgr2">${esc(m.typ||'')}</span>${del?`<button class="bi" style="font-size:11px;color:#fca5a5" onclick="event.stopPropagation();delM('${m.id}')">✕</button>`:''}</div>
+  </div>
+  <div class="acc-det" id="mac-${m.id}">
+    <div class="tabs" style="margin-bottom:10px">
+      <div class="tab on" id="mtab-i-${m.id}" onclick="mAccTab('${m.id}','i')">Info</div>
+      <div class="tab" id="mtab-mm-${m.id}" onclick="mAccTab('${m.id}','mm')">✨ Minutes</div>
+      <div class="tab" id="mtab-n-${m.id}" onclick="mAccTab('${m.id}','n')">Poznámky</div>
+    </div>
+    <div id="mas-i-${m.id}">
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        ${(m.firmaIds||[]).map(id=>`<span class="badge bgr2">${esc(fn(id))}</span>`).join('')}
+        ${(m.projektIds||[]).map(id=>`<span class="badge bbl">${esc((gP(id)||{}).nazev||'')}</span>`).join('')}
+        ${ps?`<div style="display:flex;gap:3px">${ps}</div>`:''}
+      </div>
+      ${m.popis?`<div style="font-size:12px;color:var(--dim);margin-bottom:8px">${esc(m.popis)}</div>`:''}
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn bg bs" onclick="event.stopPropagation();newN_meet('${m.id}')">+ Poznámka</button>
+        <button class="btn bg bs" onclick="event.stopPropagation();newT_meet('${m.id}')">+ Úkol</button>
+        <button class="btn brd bs" onclick="event.stopPropagation();delM('${m.id}')">Smazat</button>
+      </div>
+    </div>
+    <div id="mas-mm-${m.id}" style="display:none">
+      <div class="mm-wrap">
+        <div class="mm-tb">
+          <button class="btn bai bs" id="mmbtn-${m.id}" onclick="event.stopPropagation();aiMM('${m.id}')" ${!hasKey?'disabled title="Nastavte API klíč v Nastavení"':''}>✨ Zpracovat s AI</button>
+          <button class="btn bg bs" onclick="event.stopPropagation();mmSel('${m.id}','t')">✅ → Úkol</button>
+          <button class="btn bg bs" onclick="event.stopPropagation();mmSel('${m.id}','n')">📝 → Poznámka</button>
+          ${!hasKey?`<span style="font-size:10px;color:var(--warn)">⚠ Nastavte API klíč</span>`:''}
+        </div>
+        <textarea class="mm-area" id="mmta-${m.id}" placeholder="Napište surový zápis ze schůzky…&#10;&#10;AI zpracuje:&#10;• Firma, účastníci, témata&#10;• Hlavní body a rozhodnutí&#10;• Dobré vědět&#10;• Navrhne úkoly s přiřazením" oninput="savMMRaw('${m.id}',this.value)">${esc(m.minutesRaw||'')}</textarea>
+        <div class="mm-hint">💡 Označte text → tlačítko výše pro vytvoření úkolu nebo poznámky</div>
+      </div>
+      <div id="mmout-${m.id}" style="margin-top:10px">${m.minutesData?'<div style="font-size:11px;color:var(--mu);padding:4px 0">Načítám uložený zápis…</div>':''}</div>
+    </div>
+    <div id="mas-n-${m.id}" style="display:none">
+      <button class="btn bp bs" style="margin-bottom:8px" onclick="event.stopPropagation();newN_meet('${m.id}')">+ Poznámka</button>
+      ${DB.poznamky.filter(n=>n.meetingId===m.id).map(n=>noteH(n)).join('')||emp('📝','Žádné')}
+    </div>
   </div>`;
+}
+
+function toggleMAcc(id){
+  const item=document.getElementById('mi-'+id);
+  const acc=document.getElementById('mac-'+id);
+  if(!item||!acc)return;
+  const isOpen=acc.classList.contains('open');
+  document.querySelectorAll('.acc-det.open').forEach(el=>{
+    el.classList.remove('open');
+    const prevId=el.id.replace('mac-','').replace('tac-','').replace('nac-','').replace('tema-acc-','');
+    ['mi-','ti-','ni-acc-','tema-'].forEach(pfx=>{const p=document.getElementById(pfx+prevId);if(p)p.classList.remove('acc-open');});
+  });
+  if(!isOpen){
+    acc.classList.add('open');
+    item.classList.add('acc-open');
+    // Render cached AI result if available
+    const m=DB.meetingy.find(m=>m.id===id);
+    if(m?.minutesData) setTimeout(()=>renderMMOut(id,m.minutesData),50);
+  }
+}
+
+function mAccTab(mid,tab){
+  ['i','mm','n'].forEach(t=>{
+    const el=document.getElementById(`mas-${t}-${mid}`);
+    const tb=document.getElementById(`mtab-${t}-${mid}`);
+    if(el)el.style.display=t===tab?'block':'none';
+    if(tb)tb.classList.toggle('on',t===tab);
+  });
+}
+
+function savMMRaw(mid,val){
+  const m=DB.meetingy.find(m=>m.id===mid);
+  if(m){m.minutesRaw=val;saveDB();}
 }
 
 // ============================================================
@@ -1042,46 +1115,10 @@ function meetingy(){
   }
 }
 
+// openMDet kept for backward compat (e.g. global search) — delegates to inline accordion
 function openMDet(id){
-  const m=DB.meetingy.find(m=>m.id===id);if(!m)return;
-  const ps=(m.ucastnici||[]).map(id=>{const o=gO(id);return o?`<span class="av avxs" title="${esc(o.jmeno)}">${ini(o.jmeno)}</span>`:''}).join('');
-  const hasKey=!!(DB.apiKey||'').trim();
-  openDet(`<div style="flex:1"><div style="font-size:14px;font-weight:600">${esc(m.nazev)}</div><div style="font-size:11px;color:var(--mu);margin-top:2px">${fd(m.datum)} · ${esc(m.typ||'')}</div></div><button class="bi" onclick="closeDet()">✕</button>`,`
-    <div class="tabs"><div class="tab on" onclick="detTab(this,'md-i')">Info</div><div class="tab" onclick="detTab(this,'md-mm')">✨ Minutes</div><div class="tab" onclick="detTab(this,'md-n')">Poznámky</div></div>
-    <div id="md-i">
-      <div class="thread" style="border-left-color:var(--mu2)">
-        ${(m.firmaIds||[]).length?`<div style="margin-bottom:5px">${m.firmaIds.map(id=>`<span class="badge bgr2">${esc(fn(id))}</span>`).join(' ')}</div>`:''}
-        ${(m.projektIds||[]).length?`<div style="margin-bottom:5px">${m.projektIds.map(id=>`<span class="badge bbl">${esc((gP(id)||{}).nazev||'')}</span>`).join(' ')}</div>`:''}
-        ${ps?`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">${ps}</div>`:''}
-        ${m.popis?`<div style="font-size:12px;color:var(--dim)">${esc(m.popis)}</div>`:''}
-      </div>
-      <div style="display:flex;gap:5px;margin-top:8px">
-        <button class="btn bg bs" onclick="newN_meet('${id}')">+ Poznámka</button>
-        <button class="btn bg bs" onclick="newT_meet('${id}')">+ Úkol</button>
-        <button class="btn brd bs" onclick="delM('${id}');closeDet()">Smazat</button>
-      </div>
-    </div>
-    <div id="md-mm" style="display:none">
-      <div class="mm-wrap" id="mmw-${m.id}">
-        <div class="mm-tb">
-          <button class="btn bai bs" id="mmbtn-${m.id}" onclick="aiMM('${m.id}')" ${!hasKey?'disabled title="Nastavte API klíč v Nastavení"':''}>✨ Zpracovat s AI</button>
-          <button class="btn bg bs" onclick="mmSel('${m.id}','t')">✅ → Úkol</button>
-          <button class="btn bg bs" onclick="mmSel('${m.id}','n')">📝 → Poznámka</button>
-          ${!hasKey?`<span style="font-size:10px;color:var(--warn)">⚠ Nastavte API klíč</span>`:''}
-        </div>
-        <textarea class="mm-area" id="mmta-${m.id}" placeholder="Napište surový zápis ze schůzky…\n\nAI zpracuje:\n• Firma, účastníci, témata\n• Hlavní body a rozhodnutí\n• Dobré vědět\n• Navrhne úkoly s přiřazením">${esc(m.minutesRaw||'')}</textarea>
-        <div class="mm-hint">💡 Označte text → tlačítko výše pro vytvoření úkolu nebo poznámky</div>
-      </div>
-      <div id="mmout-${m.id}" style="margin-top:10px"></div>
-    </div>
-    <div id="md-n" style="display:none">
-      <button class="btn bp bs" style="margin-bottom:8px" onclick="newN_meet('${id}')">+ Poznámka</button>
-      ${DB.poznamky.filter(n=>n.meetingId===id).map(n=>noteH(n)).join('')||emp('📝','Žádné')}
-    </div>`);
-  // Auto-save minutes
-  setTimeout(()=>{const ta=document.getElementById('mmta-'+id);if(ta)ta.addEventListener('input',()=>{const mm=DB.meetingy.find(x=>x.id===id);if(mm){mm.minutesRaw=ta.value;saveDB();}});},100);
-  // Render cached AI result if available
-  if(m.minutesData) setTimeout(()=>renderMMOut(id,m.minutesData),100);
+  go('meetingy');
+  setTimeout(()=>toggleMAcc(id),60);
 }
 
 async function aiMM(mid){
@@ -1126,34 +1163,58 @@ function renderMMOut(mid,r){
   if(r.ukoly?.length){
     h+=`<div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 8px">✅ Navrhované úkoly (${r.ukoly.length})</div>`;
     r.ukoly.forEach((u,i)=>{
-      let mo='';if(u.prirazenaOsoba){const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(u.prirazenaOsoba.toLowerCase().split(' ')[0].toLowerCase()));if(f)mo=f.id;}
+      // Pre-select matched person
+      let presel=[];
+      if(u.prirazenaOsoba){
+        const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(u.prirazenaOsoba.toLowerCase().split(' ')[0].toLowerCase()));
+        if(f)presel=[f.id];
+      }
+      const msId=`apos-${mid}-${i}`;
       const priB=u.priorita==='vysoká'?'brd':u.priorita==='střední'?'bgr2':'bgr';
       h+=`<div class="ai-prop" id="ap-${mid}-${i}">
         <div class="ai-pt">${esc(u.nazev)}</div>
         ${u.popis?`<div style="font-size:11px;color:var(--mu);margin-bottom:5px">${esc(u.popis)}</div>`:''}
-        <div class="ai-pm">
-          <select id="apos-${mid}-${i}"><option value="">— Přiřadit —</option>${tOs.map(o=>`<option value="${o.id}"${mo===o.id?' selected':''}>${esc(o.jmeno)}</option>`).join('')}${DB.osoby.filter(o=>!tOs.includes(o)).map(o=>`<option value="${o.id}">${esc(o.jmeno)}</option>`).join('')}</select>
-          <input type="date" id="apd-${mid}-${i}" value="${u.deadline||''}">
-          <span class="badge ${priB}">${esc(u.priorita||'střední')}</span>
+        <div class="ai-pm" style="align-items:flex-start;flex-direction:column;gap:6px">
+          <div style="width:100%"><div style="font-size:10px;color:var(--mu);margin-bottom:3px">Přiřadit osobám</div>${msHtml(msId)}</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="apd-${mid}-${i}" value="${u.deadline||''}">
+            <span class="badge ${priB}">${esc(u.priorita||'střední')}</span>
+          </div>
         </div>
         <div class="ai-pa">
           <button class="btn bok bs" onclick="accAIT('${mid}',${i})">✓ Přijmout</button>
           <button class="btn brd bs" onclick="document.getElementById('ap-${mid}-${i}').classList.add('rej')">✕</button>
         </div>
       </div>`;
+      // Init multiselect after HTML is in DOM
+      const allOs=[...tOs,...DB.osoby.filter(o=>o.firmaId!==tme().id)].map(o=>({id:o.id,label:o.jmeno}));
+      setTimeout(()=>{if(!_ms[msId])initMs(msId,allOs,presel,'qaOsoba');},30);
     });
     h+=`<button class="btn bp bs" style="margin-top:4px" onclick="accAllAIT('${mid}')">✓ Přijmout všechny</button>`;
   }
   h+=`<div style="margin-top:10px"><button class="btn bg bs" onclick="copyMM('${mid}')">📋 Kopírovat zápis</button></div>`;
   out.innerHTML=h;
+  // Init all multiselects now that DOM is ready
+  if(r.ukoly?.length){
+    r.ukoly.forEach((u,i)=>{
+      const msId=`apos-${mid}-${i}`;
+      let presel=[];
+      if(u.prirazenaOsoba){
+        const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(u.prirazenaOsoba.toLowerCase().split(' ')[0].toLowerCase()));
+        if(f)presel=[f.id];
+      }
+      const allOs=[...tOs,...DB.osoby.filter(o=>o.firmaId!==tme().id)].map(o=>({id:o.id,label:o.jmeno}));
+      initMs(msId,allOs,presel,'qaOsoba');
+    });
+  }
 }
 
 function accAIT(mid,i){
   const m=DB.meetingy.find(m=>m.id===mid);if(!m?.minutesData?.ukoly)return;
   const u=m.minutesData.ukoly[i];if(!u)return;
-  const osId=document.getElementById(`apos-${mid}-${i}`)?.value;
+  const osIds=msGet(`apos-${mid}-${i}`);
   const dead=document.getElementById(`apd-${mid}-${i}`)?.value;
-  DB.ukoly.push({id:uid(),nazev:u.nazev,popis:u.popis||'',prirazena:osId?[osId]:[jaOs().id],deadline:dead||'',projektId:m.projektIds?.[0]||'',firmaId:m.firmaIds?.[0]||'',tags:{firmaIds:m.firmaIds||[],projektIds:m.projektIds||[]},done:false,created:today(),poznamka:'',prilohy:[]});
+  DB.ukoly.push({id:uid(),nazev:u.nazev,popis:u.popis||'',prirazena:osIds.length?osIds:[jaOs().id],deadline:dead||'',projektId:m.projektIds?.[0]||'',firmaId:m.firmaIds?.[0]||'',firmaIds:m.firmaIds||[],tags:{firmaIds:m.firmaIds||[],projektIds:m.projektIds||[]},done:false,created:today(),poznamka:'',prilohy:[]});
   saveDB();
   const el=document.getElementById(`ap-${mid}-${i}`);
   if(el){el.classList.add('acc');el.querySelector('.ai-pa').innerHTML=`<span style="font-size:11px;color:var(--ok)">✓ Uloženo</span>`;}
@@ -1176,7 +1237,6 @@ function mmSel(mid,type){
   const sel=ta.value.substring(ta.selectionStart,ta.selectionEnd).trim()||ta.value.trim();
   if(!sel){toast('Označte část textu',false);return;}
   const m=DB.meetingy.find(m=>m.id===mid);
-  closeDet();
   if(type==='t')setTimeout(()=>buildT(sel,(m?.ucastnici||[]).slice(0,1),m?.projektIds?.[0]||'',m?.firmaIds?.[0]||''),60);
   else setTimeout(()=>buildN(null,sel,m?.ucastnici||[],m?.firmaIds||[],m?.projektIds||[]),60);
 }
