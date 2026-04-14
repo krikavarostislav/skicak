@@ -302,7 +302,16 @@ function initDB() {
 }
 
 function loadDB() {
+  // Try current key first
   try { const s=localStorage.getItem(DBKEY); if(s){DB=JSON.parse(s); migrateDB(); return;} } catch(e){}
+  // Fallback: migrate data from older versions
+  const oldKeys=['skicak_v7','skicak_v6','skicak_v5','skicak_v4'];
+  for(const k of oldKeys){
+    try {
+      const s=localStorage.getItem(k);
+      if(s){ DB=JSON.parse(s); migrateDB(); saveDB(); console.log('Skicák: migrated from '+k); return; }
+    } catch(e){}
+  }
   DB=initDB(); saveDB();
 }
 
@@ -1969,8 +1978,12 @@ async function processDump(){
   const firmyList=DB.firmy.map(f=>f.nazev).join(', ');
   const projektList=DB.projekty.map(p=>p.nazev).join(', ');
   const sys=`Jsi asistent projektového manažera v české healthcare agentuře TME Solutions.
-Z textu extrahuj úkoly a meetingy. Vrať POUZE validní JSON bez markdown:
-{"ukoly":[{"nazev":"","popis":"","prirazenaOsoba":"","firmaId_hint":"","projektId_hint":"","deadline":""}],"meetingy":[{"nazev":"","typ":"s klientem|1:1|s týmem|s managementem","datum":"","firma_hint":"","poznamka":""}]}
+Z textu extrahuj úkoly, meetingy a témata k probrání. Vrať POUZE validní JSON bez markdown:
+{"ukoly":[{"nazev":"","popis":"","prirazenaOsoba":"","firmaId_hint":"","projektId_hint":"","deadline":""}],"meetingy":[{"nazev":"","typ":"s klientem|1:1|s týmem|s managementem","datum":"","firma_hint":"","poznamka":""}],"temata":[{"predmet":"","poznamka":"","osobaJmeno":""}]}
+Pravidla rozlišení:
+- "téma pro X", "řekni Xovi", "probrat s X", "zmínit Xovi" = TÉMA (ne meeting, ne úkol)
+- Konkrétní schůzka s datem nebo typem = MEETING
+- Akce kterou někdo musí udělat = ÚKOL
 Osoby v systému: ${osobyList}
 Firmy: ${firmyList}
 Projekty: ${projektList}
@@ -2056,7 +2069,31 @@ function renderDumpOut(res){
     });
   }
 
-  if(!res.ukoly?.length&&!res.meetingy?.length){
+  if(res.temata?.length){
+    h+=`<div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin:10px 0 6px">💬 Navrhovaná témata (${res.temata.length})</div>`;
+    res.temata.forEach((t,i)=>{
+      // Pre-select matched person
+      let preOs=null;
+      if(t.osobaJmeno){const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(t.osobaJmeno.toLowerCase().split(' ')[0].toLowerCase()));if(f)preOs=f;}
+      h+=`<div class="ai-prop" id="dump-tp-wrap-${i}">
+        <div class="ai-pt">${esc(t.predmet)}</div>
+        ${t.poznamka?`<div style="font-size:11px;color:var(--mu);margin-bottom:6px">${esc(t.poznamka)}</div>`:''}
+        <div style="margin-bottom:6px">
+          <div style="font-size:10px;color:var(--mu);margin-bottom:2px">Osoba</div>
+          <select id="dump-tos-${i}" style="background:var(--n3);border:1px solid var(--bd2);border-radius:5px;padding:3px 7px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none;width:100%">
+            <option value="">— Vyberte osobu —</option>
+            ${sortedOsoby(DB.osoby).map(o=>`<option value="${o.id}"${preOs&&preOs.id===o.id?' selected':''}>${esc(o.jmeno)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ai-pa">
+          <button class="btn bok bs" onclick="accDumpTema(${i})">✓ Přijmout</button>
+          <button class="btn brd bs" onclick="document.getElementById('dump-tp-wrap-${i}').classList.add('rej')">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  if(!res.ukoly?.length&&!res.meetingy?.length&&!res.temata?.length){
     h=`<div style="font-size:12px;color:var(--mu);padding:8px">Nic nenalezeno — zkus přidat více kontextu.</div>`;
   } else {
     // Store result for accept handlers
@@ -2108,11 +2145,24 @@ function accDumpMeeting(i){
   toast('Meeting přidán: '+m.nazev);
 }
 
+function accDumpTema(i){
+  const t=window._dumpRes?.temata?.[i];if(!t)return;
+  const osId=document.getElementById('dump-tos-'+i)?.value;
+  if(!osId){toast('Vyber osobu',false);return;}
+  if(!DB.temata)DB.temata=[];
+  DB.temata.push({id:uid(),predmet:t.predmet,poznamka:t.poznamka||'',osobaId:osId,done:false,created:today()});
+  saveDB();
+  const el=document.getElementById('dump-tp-wrap-'+i);
+  if(el){el.classList.add('acc');el.querySelector('.ai-pa').innerHTML=`<span style="font-size:11px;color:var(--ok)">✓ Uloženo</span>`;}
+  toast('Téma přidáno: '+t.predmet);
+}
+
 function accDumpAll(){
   const res=window._dumpRes;if(!res)return;
   let cnt=0;
   res.ukoly?.forEach((_,i)=>{const el=document.getElementById('dump-up-wrap-'+i);if(el&&!el.classList.contains('acc')&&!el.classList.contains('rej')){accDumpUkol(i);cnt++;}});
   res.meetingy?.forEach((_,i)=>{const el=document.getElementById('dump-mp-wrap-'+i);if(el&&!el.classList.contains('acc')&&!el.classList.contains('rej')){accDumpMeeting(i);cnt++;}});
+  res.temata?.forEach((_,i)=>{const el=document.getElementById('dump-tp-wrap-'+i);if(el&&!el.classList.contains('acc')&&!el.classList.contains('rej')){accDumpTema(i);cnt++;}});
   if(cnt)toast(cnt+' položek přidáno');
 }
 
