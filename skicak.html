@@ -198,6 +198,8 @@ body{font-family:var(--font);background:var(--n0);color:var(--wh);font-size:13px
 .dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--bl);animation:dt 1.2s infinite;margin:0 2px}
 .dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
 @keyframes dt{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+/* Hide thread preview body when accordion is open */
+.thread.acc-open .tbody{display:none}
 /* MISC */
 .emp{text-align:center;padding:28px 16px;color:var(--mu)}.empi{font-size:26px;margin-bottom:8px;opacity:.3}
 hr{border:none;border-top:1px solid var(--bd2);margin:12px 0}
@@ -278,7 +280,7 @@ hr{border:none;border-top:1px solid var(--bd2);margin:12px 0}
 // ============================================================
 // DB — klíč zachován pro kompatibilitu s předchozími daty
 // ============================================================
-const DBKEY = 'skicak_v6';
+const DBKEY = 'skicak_v8';
 let DB, curPage = 'ja', _ms = {};
 
 function initDB() {
@@ -311,7 +313,7 @@ function migrateDB() {
   DB.osoby.forEach(o=>{if(!o.prilohy)o.prilohy=[];if(!o.tym)o.tym=o.podrizeny?'Digi':'';if(!o.firmaIds)o.firmaIds=o.firmaId?[o.firmaId]:[];});
   DB.projekty.forEach(p=>{if(!p.prilohy)p.prilohy=[];if(!p.firmaIds)p.firmaIds=p.firmaId?[p.firmaId]:[];});
   DB.firmy.forEach(f=>{if(!f.prilohy)f.prilohy=[];if(!f.typ)f.typ=f.interni?'Naše firma':'Klient';});
-  DB.ukoly.forEach(u=>{if(!u.prilohy)u.prilohy=[];if(!u.poznamka)u.poznamka='';if(!u.tags)u.tags={firmaIds:[],projektIds:[],osobyIds:[]};if(!u.firmaIds)u.firmaIds=u.firmaId?[u.firmaId]:[];if(!u.subtasks)u.subtasks=[];});
+  DB.ukoly.forEach(u=>{if(!u.prilohy)u.prilohy=[];if(!u.poznamka)u.poznamka='';if(!u.tags)u.tags={firmaIds:[],projektIds:[],osobyIds:[]};if(!u.firmaIds)u.firmaIds=u.firmaId?[u.firmaId]:[];if(!u.subtasks)u.subtasks=[];u.subtasks.forEach(st=>{if(!st.osobyIds)st.osobyIds=[];});});
   DB.poznamky.forEach(n=>{if(!n.pinned)n.pinned=false;});
   if(!DB.temata)DB.temata=[];
   DB.temata.forEach(t=>{if(!t.osobaId&&t.osobyIds?.length)t.osobaId=t.osobyIds[0];delete t.osobyIds;});
@@ -336,7 +338,18 @@ const MT=['s klientem','1:1','s týmem','s managementem'];
 const TYMY=['Digi','Event','Analytics','DEV','Finance','Medical','CEO'];
 const FIRMA_TYPY=['Klient','Dodavatel','Naše firma'];
 function sbdg(s){const m={'běžící':'srun','zastavený':'sstp','dokončený':'sdon','v přípravě':'sprp'};return`<span class="badge ${m[s]||'bgr2'}">${esc(s)}</span>`}
-function updBdg(){const e=document.getElementById('bdg');if(e)e.textContent=DB.ukoly.filter(u=>!u.done).length}
+function updBdg(){
+  const e=document.getElementById('bdg');if(!e)return;
+  const open=DB.ukoly.filter(u=>!u.done);
+  e.textContent=open.length;
+  // Deadline badge: overdue or due today/tomorrow
+  const now=new Date(today());
+  const tom=new Date(now);tom.setDate(tom.getDate()+1);
+  const urgent=open.filter(u=>{if(!u.deadline)return false;const d=new Date(u.deadline);return d<=tom;});
+  let db=document.getElementById('bdg-dead');
+  if(!db){db=document.createElement('span');db.id='bdg-dead';db.className='nbdg';db.style.background='var(--err)';db.style.marginLeft='3px';const ni=document.getElementById('ni-ukoly');if(ni)ni.appendChild(db);}
+  if(urgent.length){db.textContent=urgent.length;db.style.display='';}else{db.style.display='none';}
+}
 
 // Sort úkolů: deadline ASC, poté datum zadání
 function sortedUkoly(list) {
@@ -614,6 +627,15 @@ function ja(){
   const mte=DB.temata.filter(t=>t.osobaId===me.id&&!t.done);
   document.getElementById('tba').innerHTML=`<button class="btn bp bs" onclick="newN()">+ Poznámka</button>`;
   document.getElementById('content').innerHTML=`
+    <div id="dump-wrap" style="margin-bottom:16px;background:var(--n2);border:1px solid var(--bd2);border-radius:var(--rl);padding:14px 16px">
+      <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">⚡ Rychlý zápis</div>
+      <textarea id="dump-inp" class="fta" style="min-height:72px;font-size:13px;margin-bottom:8px" placeholder="Nadiktuješ nebo napíšeš cokoliv… AI roztřídí na úkoly a meetingy.&#10;&#10;Např: „Adam říkal že Novartis potřebuje do pátku reporty, příští týden meeting s BI""></textarea>
+      <div style="display:flex;gap:7px;align-items:center">
+        <button class="btn bai bs" id="dump-btn" onclick="processDump()" ${!(DB.apiKey||'').trim()?'disabled title="Nastavte API klíč v Nastavení"':''}>✨ Zpracovat s AI</button>
+        ${!(DB.apiKey||'').trim()?`<span style="font-size:11px;color:var(--warn)">⚠ Nastavte API klíč v Nastavení</span>`:''}
+      </div>
+      <div id="dump-out" style="margin-top:10px"></div>
+    </div>
     <div class="phero"><div style="display:flex;align-items:center;gap:13px">
       <div class="av" style="width:46px;height:46px;font-size:17px;border-radius:11px;background:var(--bl);color:#fff">${ini(me.jmeno)}</div>
       <div><div style="font-size:18px;font-weight:600">${esc(me.jmeno)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px">${esc(me.pozice)} · TME Solutions</div></div>
@@ -665,7 +687,7 @@ function tskH(u,del,compact){
     ${del?`<button class="bi" style="font-size:11px;color:#fca5a5" onclick="event.stopPropagation();delT('${u.id}')">✕</button>`:''}
   </div>
   <div class="acc-det" id="tac-${u.id}">
-    ${u.popis?`<div style="font-size:12px;color:var(--dim);margin-bottom:9px">${esc(u.popis)}</div>`:''}
+    ${u.popis?`<div style="font-size:12px;color:var(--dim);margin-bottom:9px;white-space:pre-wrap">${esc(u.popis)}</div>`:''}
     <div style="margin-bottom:9px">
       <div class="st" style="margin-bottom:5px">Poznámka k úkolu</div>
       <textarea class="fta" id="tu-note-acc-${u.id}" style="min-height:50px;font-size:11px" placeholder="Poznámka…">${esc(u.poznamka||'')}</textarea>
@@ -673,14 +695,15 @@ function tskH(u,del,compact){
     </div>
     <div style="margin-bottom:9px">
       <div class="st" style="margin-bottom:5px">Podúkoly</div>
-      ${(u.subtasks||[]).map((st,si)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      ${(u.subtasks||[]).map((st,si)=>{const stOs=(st.osobyIds||[]).map(oid=>{const o=gO(oid);return o?`<span class="av avxs" title="${esc(o.jmeno)}">${ini(o.jmeno)}</span>`:''}).join('');return`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
         <div class="tcb${st.done?' dn':''}" style="width:14px;height:14px;font-size:8px" onclick="togSubtask('${u.id}',${si})">${st.done?'✓':''}</div>
-        <span style="font-size:11px;color:var(--wh);${st.done?'text-decoration:line-through;color:var(--mu)':''};flex:1">${esc(st.text)}</span>
+        <div style="flex:1;min-width:0"><span style="font-size:11px;color:var(--wh);${st.done?'text-decoration:line-through;color:var(--mu)':''}">${esc(st.text)}</span>${stOs?`<div style="display:flex;gap:2px;margin-top:2px">${stOs}</div>`:''}</div>
         <button class="bi" style="font-size:10px;color:#fca5a5;padding:2px 6px" onclick="delSubtask('${u.id}',${si})">✕</button>
-      </div>`).join('')}
-      <div style="display:flex;gap:5px;margin-top:4px">
-        <input id="st-inp-${u.id}" placeholder="Nový podúkol…" style="flex:1;background:var(--n4);border:1px solid var(--bd2);border-radius:7px;padding:5px 9px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask('${u.id}')}">
-        <button class="btn bp bs" style="font-size:10px" onclick="addSubtask('${u.id}')">Přidat</button>
+      </div>`;}).join('')}
+      <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;align-items:center">
+        <input id="st-inp-${u.id}" placeholder="Nový podúkol…" style="flex:2;min-width:120px;background:var(--n4);border:1px solid var(--bd2);border-radius:7px;padding:5px 9px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask('${u.id}')}">
+        <div style="flex:1;min-width:100px" id="st-os-wrap-${u.id}">${msHtml('st-os-'+u.id)}</div>
+        <button class="btn bp bs" style="font-size:10px;flex-shrink:0" onclick="addSubtask('${u.id}')">Přidat</button>
       </div>
     </div>
     <div style="margin-bottom:9px">
@@ -714,7 +737,15 @@ function toggleTAcc(id){
     const prevItem=document.getElementById('ti-'+el.id.replace('tac-',''))||document.getElementById('ni-acc-'+el.id.replace('nac-',''));
     if(prevItem)prevItem.classList.remove('acc-open');
   });
-  if(!isOpen){acc.classList.add('open');item.classList.add('acc-open');}
+  if(!isOpen){
+    acc.classList.add('open');item.classList.add('acc-open');
+    // Init subtask person multiselect
+    const msId='st-os-'+id;
+    if(!_ms[msId]){
+      const allOs=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+      initMs(msId,allOs,[],'qaOsoba');
+    }
+  }
 }
 
 function noteH(n){
@@ -733,8 +764,8 @@ function noteH(n){
       ${(n.projektIds||[]).map(id=>`<span class="badge bbl">${esc((gP(id)||{}).nazev||'')}</span>`).join('')}
       ${ps}
     </div>
-    ${(n.updates||[]).length?`<div style="margin-bottom:8px">${n.updates.slice(-3).map(u=>`<div class="tupd"><div class="tumeta">${fd(u.datum)}</div>${esc(u.text)}</div>`).join('')}</div>`:''}
-    <div class="aupd" style="margin-bottom:9px"><input id="ni-upd-${n.id}" placeholder="Přidat aktualizaci…" style="font-size:11px"><button class="btn bp bs" style="font-size:10px" onclick="addNUpdAcc('${n.id}')">+</button></div>
+    ${(n.updates||[]).length?`<div style="margin-bottom:8px"><div class="st" style="margin-bottom:5px">Další poznámky</div>${n.updates.map((u,ui)=>`<div class="tupd" style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px"><div style="flex:1"><div class="tumeta">${fd(u.datum)}</div>${esc(u.text)}</div><button class="bi" style="font-size:10px;color:#fca5a5;flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();delNUpd('${n.id}',${ui})">✕</button></div>`).join('')}</div>`:''}
+    <div class="aupd" style="margin-bottom:9px"><input id="ni-upd-${n.id}" placeholder="Přidat další poznámku…" style="font-size:11px"><button class="btn bp bs" style="font-size:10px" onclick="addNUpdAcc('${n.id}')">+</button></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">
       <button class="btn bg bs" style="font-size:10px" onclick="editN('${n.id}')">✎ Upravit</button>
       <button class="btn ${n.pinned?'brd':'bg'} bs" style="font-size:10px" onclick="togglePin('${n.id}')">${n.pinned?'📌 Odšpendlit':'📌 Přichytit'}</button>
@@ -1242,8 +1273,10 @@ function addSubtask(id){
   const t=inp.value.trim();if(!t)return;
   const u=DB.ukoly.find(u=>u.id===id);if(!u)return;
   if(!u.subtasks)u.subtasks=[];
-  u.subtasks.push({id:uid(),text:t,done:false});
+  const osobyIds=msGet('st-os-'+id);
+  u.subtasks.push({id:uid(),text:t,done:false,osobyIds});
   saveDB();
+  inp.value='';
   _rerenderT(u, true);
   toast('Podúkol přidán');
 }
@@ -1465,6 +1498,19 @@ function togglePin(id){
 }
 function addNUpd(id){const i=document.getElementById('ni-'+id);if(!i)return;const t=i.value.trim();if(!t)return;const n=DB.poznamky.find(n=>n.id===id);if(!n)return;if(!n.updates)n.updates=[];n.updates.push({datum:today(),text:t});saveDB();toast('Přidáno')}
 function delN(id){if(!confirm('Smazat?'))return;DB.poznamky=DB.poznamky.filter(n=>n.id!==id);saveDB();go(curPage);toast('Smazáno')}
+function delNUpd(id,idx){
+  const n=DB.poznamky.find(n=>n.id===id);if(!n||!n.updates)return;
+  n.updates.splice(idx,1);saveDB();
+  const item=document.getElementById('ni-acc-'+id);
+  const acc=document.getElementById('nac-'+id);
+  if(item&&acc){
+    const wrapper=document.createElement('div');wrapper.innerHTML=noteH(n);
+    item.replaceWith(wrapper.firstChild);acc.replaceWith(wrapper.lastChild);
+    const newAcc=document.getElementById('nac-'+id);const newItem=document.getElementById('ni-acc-'+id);
+    if(newAcc&&newItem){newAcc.classList.add('open');newItem.classList.add('acc-open');}
+  }
+  toast('Poznámka smazána');
+}
 
 // ============================================================
 // PAGE: NASTAVENÍ
@@ -1504,7 +1550,7 @@ function gsearch(q){
   DB.osoby.filter(o=>o.jmeno.toLowerCase().includes(q.toLowerCase())).forEach(o=>res.push({type:'Osoba',title:o.jmeno,sub:o.pozice||'',fn:()=>openODet(o.id)}));
   DB.projekty.filter(p=>p.nazev.toLowerCase().includes(q.toLowerCase())||(p.epid||'').toLowerCase().includes(q.toLowerCase())).forEach(p=>res.push({type:'Projekt',title:p.nazev,sub:(p.firmaIds||[]).map(fn).join(', '),fn:()=>openPDet(p.id)}));
   DB.poznamky.filter(n=>(n.predmet+(n.obsah||'')).toLowerCase().includes(q.toLowerCase())).forEach(n=>res.push({type:'Poznámka',title:n.predmet,sub:'',fn:()=>openNDet(n.id)}));
-  DB.ukoly.filter(u=>u.nazev.toLowerCase().includes(q.toLowerCase())).forEach(u=>res.push({type:'Úkol',title:u.nazev,sub:'',fn:()=>openTDet(u.id)}));
+  DB.ukoly.filter(u=>u.nazev.toLowerCase().includes(q.toLowerCase())||(u.popis||'').toLowerCase().includes(q.toLowerCase())||(u.poznamka||'').toLowerCase().includes(q.toLowerCase())).forEach(u=>res.push({type:'Úkol',title:u.nazev,sub:(u.popis||'').slice(0,60)||'',fn:()=>openTDet(u.id)}));
   curPage='s';document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));
   document.getElementById('tbt').textContent='Hledání';document.getElementById('tbs').textContent=`${res.length} výsl. pro „${q}"`;
   document.getElementById('tba').innerHTML='';window._sr=res.map(r=>r.fn);
@@ -1909,6 +1955,168 @@ function temataSection(osId, containerId) {
 }
 
 // ============================================================
+// QUICK DUMP — AI roztřídí surový text na úkoly a meetingy
+// ============================================================
+async function processDump(){
+  const raw=document.getElementById('dump-inp')?.value.trim();
+  if(!raw){toast('Nejprve něco napiš',false);return;}
+  const btn=document.getElementById('dump-btn');
+  const out=document.getElementById('dump-out');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Zpracovávám…';}
+  if(out)out.innerHTML=`<div style="display:flex;align-items:center;gap:8px;color:var(--mu);font-size:12px;padding:4px 0"><div class="dots"><span></span><span></span><span></span></div>Claude zpracovává…</div>`;
+
+  const osobyList=DB.osoby.map(o=>o.jmeno).join(', ');
+  const firmyList=DB.firmy.map(f=>f.nazev).join(', ');
+  const projektList=DB.projekty.map(p=>p.nazev).join(', ');
+  const sys=`Jsi asistent projektového manažera v české healthcare agentuře TME Solutions.
+Z textu extrahuj úkoly a meetingy. Vrať POUZE validní JSON bez markdown:
+{"ukoly":[{"nazev":"","popis":"","prirazenaOsoba":"","firmaId_hint":"","projektId_hint":"","deadline":""}],"meetingy":[{"nazev":"","typ":"s klientem|1:1|s týmem|s managementem","datum":"","firma_hint":"","poznamka":""}]}
+Osoby v systému: ${osobyList}
+Firmy: ${firmyList}
+Projekty: ${projektList}
+Datum dnes: ${today()}. Deadline formát YYYY-MM-DD. Vrať POUZE JSON.`;
+
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':DB.apiKey||'','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,system:sys,messages:[{role:'user',content:raw}]})});
+    const d=await r.json();
+    if(d.error)throw new Error(d.error.message);
+    const txt=d.content?.find(b=>b.type==='text')?.text||'';
+    const res=JSON.parse(txt.replace(/```json|```/g,'').trim());
+    renderDumpOut(res);
+  }catch(e){
+    if(out)out.innerHTML=`<div style="color:var(--err);font-size:12px;padding:8px">${e.message?.includes('401')||e.message?.includes('api_key')?'Neplatný API klíč.':'Chyba: '+esc(String(e))}</div>`;
+    toast('Chyba AI',false);
+  }
+  if(btn){btn.disabled=false;btn.textContent='✨ Zpracovat s AI';}
+}
+
+function renderDumpOut(res){
+  const out=document.getElementById('dump-out');if(!out)return;
+  const tOs=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+  const fI=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
+  const pI=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
+  let h='';
+
+  if(res.ukoly?.length){
+    h+=`<div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✅ Navrhované úkoly (${res.ukoly.length})</div>`;
+    res.ukoly.forEach((u,i)=>{
+      const msId=`dump-uos-${i}`;
+      const msFId=`dump-uf-${i}`;
+      const msPId=`dump-up-${i}`;
+      // Pre-select matched person
+      let preOs=[];
+      if(u.prirazenaOsoba){const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(u.prirazenaOsoba.toLowerCase().split(' ')[0]));if(f)preOs=[f.id];}
+      let preF=[];
+      if(u.firmaId_hint){const f=DB.firmy.find(f=>f.nazev.toLowerCase().includes(u.firmaId_hint.toLowerCase()));if(f)preF=[f.id];}
+      let preP=[];
+      if(u.projektId_hint){const p=DB.projekty.find(p=>p.nazev.toLowerCase().includes(u.projektId_hint.toLowerCase()));if(p)preP=[p.id];}
+      h+=`<div class="ai-prop" id="dump-up-wrap-${i}">
+        <div class="ai-pt">${esc(u.nazev)}</div>
+        ${u.popis?`<div style="font-size:11px;color:var(--mu);margin-bottom:6px">${esc(u.popis)}</div>`:''}
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
+          <div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Přiřadit</div>${msHtml(msId)}</div>
+          <div class="fr"><div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Firma</div>${msHtml(msFId)}</div><div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Projekt</div>${msHtml(msPId)}</div></div>
+          <div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Deadline</div><input type="date" id="dump-ud-${i}" value="${u.deadline||''}" style="background:var(--n3);border:1px solid var(--bd2);border-radius:5px;padding:3px 7px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none"></div>
+        </div>
+        <div class="ai-pa">
+          <button class="btn bok bs" onclick="accDumpUkol(${i})">✓ Přijmout</button>
+          <button class="btn brd bs" onclick="document.getElementById('dump-up-wrap-${i}').classList.add('rej')">✕</button>
+        </div>
+      </div>`;
+      setTimeout(()=>{
+        initMs(msId,tOs,preOs,'qaOsoba');
+        initMs(msFId,fI,preF,'qaFirma');
+        initMs(msPId,pI,preP,'qaProjekt');
+      },30);
+    });
+  }
+
+  if(res.meetingy?.length){
+    h+=`<div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin:10px 0 6px">📅 Navrhované meetingy (${res.meetingy.length})</div>`;
+    res.meetingy.forEach((m,i)=>{
+      const msFId=`dump-mf-${i}`;
+      let preF=[];
+      if(m.firma_hint){const f=DB.firmy.find(f=>f.nazev.toLowerCase().includes(m.firma_hint.toLowerCase()));if(f)preF=[f.id];}
+      h+=`<div class="ai-prop" id="dump-mp-wrap-${i}">
+        <div class="ai-pt">${esc(m.nazev)}</div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
+          <div class="fr">
+            <div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Typ</div><select id="dump-mt-${i}" style="background:var(--n3);border:1px solid var(--bd2);border-radius:5px;padding:3px 7px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none">${MT.map(t=>`<option${m.typ===t?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
+            <div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Datum</div><input type="date" id="dump-md-${i}" value="${m.datum||today()}" style="background:var(--n3);border:1px solid var(--bd2);border-radius:5px;padding:3px 7px;color:var(--wh);font-family:var(--font);font-size:11px;outline:none"></div>
+          </div>
+          <div><div style="font-size:10px;color:var(--mu);margin-bottom:2px">Firma</div>${msHtml(msFId)}</div>
+          ${m.poznamka?`<div style="font-size:11px;color:var(--dim)">${esc(m.poznamka)}</div>`:''}
+        </div>
+        <div class="ai-pa">
+          <button class="btn bok bs" onclick="accDumpMeeting(${i})">✓ Přijmout</button>
+          <button class="btn brd bs" onclick="document.getElementById('dump-mp-wrap-${i}').classList.add('rej')">✕</button>
+        </div>
+      </div>`;
+      setTimeout(()=>initMs(msFId,fI,preF,'qaFirma'),30);
+    });
+  }
+
+  if(!res.ukoly?.length&&!res.meetingy?.length){
+    h=`<div style="font-size:12px;color:var(--mu);padding:8px">Nic nenalezeno — zkus přidat více kontextu.</div>`;
+  } else {
+    // Store result for accept handlers
+    window._dumpRes=res;
+    h+=`<div style="margin-top:6px;display:flex;gap:6px"><button class="btn bp bs" onclick="accDumpAll()">✓ Přijmout vše</button><button class="btn bg bs" onclick="document.getElementById('dump-out').innerHTML='';document.getElementById('dump-inp').value=''">Vymazat</button></div>`;
+  }
+  out.innerHTML=h;
+  // Init multiselecty after DOM
+  if(res.ukoly?.length){
+    res.ukoly.forEach((u,i)=>{
+      const tOs2=sortedOsoby(DB.osoby).map(o=>({id:o.id,label:o.jmeno}));
+      const fI2=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
+      const pI2=sortedProjekty(DB.projekty).map(p=>({id:p.id,label:p.nazev}));
+      let preOs=[];if(u.prirazenaOsoba){const f=DB.osoby.find(o=>o.jmeno.toLowerCase().includes(u.prirazenaOsoba.toLowerCase().split(' ')[0]));if(f)preOs=[f.id];}
+      let preF=[];if(u.firmaId_hint){const f=DB.firmy.find(f=>f.nazev.toLowerCase().includes(u.firmaId_hint.toLowerCase()));if(f)preF=[f.id];}
+      let preP=[];if(u.projektId_hint){const p=DB.projekty.find(p=>p.nazev.toLowerCase().includes(u.projektId_hint.toLowerCase()));if(p)preP=[p.id];}
+      initMs('dump-uos-'+i,tOs2,preOs,'qaOsoba');
+      initMs('dump-uf-'+i,fI2,preF,'qaFirma');
+      initMs('dump-up-'+i,pI2,preP,'qaProjekt');
+    });
+  }
+  if(res.meetingy?.length){
+    res.meetingy.forEach((m,i)=>{
+      const fI2=sortedFirmy(DB.firmy).map(f=>({id:f.id,label:f.nazev}));
+      let preF=[];if(m.firma_hint){const f=DB.firmy.find(f=>f.nazev.toLowerCase().includes(m.firma_hint.toLowerCase()));if(f)preF=[f.id];}
+      initMs('dump-mf-'+i,fI2,preF,'qaFirma');
+    });
+  }
+}
+
+function accDumpUkol(i){
+  const u=window._dumpRes?.ukoly?.[i];if(!u)return;
+  const firmaIds=msGet('dump-uf-'+i);
+  const prjId=msGet('dump-up-'+i)[0]||'';
+  DB.ukoly.push({id:uid(),nazev:u.nazev,popis:u.popis||'',prirazena:msGet('dump-uos-'+i).length?msGet('dump-uos-'+i):[jaOs().id],deadline:document.getElementById('dump-ud-'+i)?.value||'',projektId:prjId,firmaId:firmaIds[0]||'',firmaIds,tags:{firmaIds,projektIds:prjId?[prjId]:[],osobyIds:[]},done:false,created:today(),poznamka:'',prilohy:[],subtasks:[]});
+  saveDB();
+  const el=document.getElementById('dump-up-wrap-'+i);
+  if(el){el.classList.add('acc');el.querySelector('.ai-pa').innerHTML=`<span style="font-size:11px;color:var(--ok)">✓ Uloženo</span>`;}
+  toast('Úkol přidán: '+u.nazev);
+}
+
+function accDumpMeeting(i){
+  const m=window._dumpRes?.meetingy?.[i];if(!m)return;
+  const firmaIds=msGet('dump-mf-'+i);
+  DB.meetingy.push({id:uid(),nazev:m.nazev,typ:document.getElementById('dump-mt-'+i)?.value||'s klientem',datum:document.getElementById('dump-md-'+i)?.value||today(),firmaIds,projektIds:[],ucastnici:[jaOs().id],popis:m.poznamka||'',minutesRaw:'',minutesData:null});
+  saveDB();
+  const el=document.getElementById('dump-mp-wrap-'+i);
+  if(el){el.classList.add('acc');el.querySelector('.ai-pa').innerHTML=`<span style="font-size:11px;color:var(--ok)">✓ Uloženo</span>`;}
+  toast('Meeting přidán: '+m.nazev);
+}
+
+function accDumpAll(){
+  const res=window._dumpRes;if(!res)return;
+  let cnt=0;
+  res.ukoly?.forEach((_,i)=>{const el=document.getElementById('dump-up-wrap-'+i);if(el&&!el.classList.contains('acc')&&!el.classList.contains('rej')){accDumpUkol(i);cnt++;}});
+  res.meetingy?.forEach((_,i)=>{const el=document.getElementById('dump-mp-wrap-'+i);if(el&&!el.classList.contains('acc')&&!el.classList.contains('rej')){accDumpMeeting(i);cnt++;}});
+  if(cnt)toast(cnt+' položek přidáno');
+}
+
+// ============================================================
 // EXPORT / IMPORT
 function expData(){const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`skicak-${today()}.json`;a.click();toast('Data exportována');}
 function trigImp(){document.getElementById('impf').click()}
@@ -1916,10 +2124,39 @@ function impData(e){const f=e.target.files[0];if(!f)return;const r=new FileReade
 
 // INIT
 loadDB();
+
+// Request notification permission on load
+function initNotifications(){
+  if(!('Notification' in window))return;
+  if(Notification.permission==='default')Notification.requestPermission();
+}
+
+function checkDeadlineNotifications(){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  const now=new Date(today());
+  const tom=new Date(now);tom.setDate(tom.getDate()+1);
+  const urgent=DB.ukoly.filter(u=>{if(u.done||!u.deadline)return false;return new Date(u.deadline)<=tom;});
+  if(!urgent.length)return;
+  // Only notify once per day
+  const lastKey='skicak_notif_'+today();
+  if(localStorage.getItem(lastKey))return;
+  localStorage.setItem(lastKey,'1');
+  const ovd=urgent.filter(u=>new Date(u.deadline)<now);
+  const tod=urgent.filter(u=>u.deadline===today());
+  const parts=[];
+  if(ovd.length)parts.push(`${ovd.length} po deadlinu`);
+  if(tod.length)parts.push(`${tod.length} dnes`);
+  const rest=urgent.length-ovd.length-tod.length;
+  if(rest>0)parts.push(`${rest} zítra`);
+  new Notification('Skicák — Deadliny ⚠', {body:parts.join(' · '),icon:'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzI1NjNlYiIvPjx0ZXh0IHg9IjE2IiB5PSIyMyIgZm9udC1mYW1pbHk9IkFyaWFsIEJsYWNrLHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI5MDAiIGZvbnQtc2l6ZT0iMjIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5TPC90ZXh0Pjwvc3ZnPg=='});
+}
+
 setTimeout(()=>{
   document.getElementById('loader').style.display='none';
   document.getElementById('app').classList.add('ready');
   go('ja');
+  initNotifications();
+  setTimeout(checkDeadlineNotifications, 1500);
   if('serviceWorker' in navigator) {
     if(location.protocol === 'file:') {
       console.warn('Skicák: SW nelze registrovat přes file://, spusť přes lokální server nebo nasaď na hosting.');
